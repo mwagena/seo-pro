@@ -12,6 +12,7 @@ use Statamic\SeoPro\SiteDefaults;
 abstract class TestCase extends \Orchestra\Testbench\TestCase
 {
     protected $siteFixturePath = __DIR__.'/Fixtures/site';
+    protected $files;
 
     protected function getPackageProviders($app)
     {
@@ -97,6 +98,8 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
             'statamic/seo-pro' => [
                 'id' => 'statamic/seo-pro',
                 'namespace' => 'Statamic\\SeoPro',
+                'autoload' => 'src',
+                'provider' => \Statamic\SeoPro\ServiceProvider::class,
             ],
         ];
     }
