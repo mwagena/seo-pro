@@ -4,6 +4,7 @@ namespace Tests;
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Testing\TestResponse;
+use PHPUnit\Framework\Assert;
 use Statamic\Extend\Manifest;
 use Statamic\Facades\Site;
 use Statamic\Facades\YAML;
@@ -42,6 +43,8 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
         $this->restoreSiteDefaults();
 
         $this->addGqlMacros();
+
+        $this->addTestResponseMacros();
     }
 
     protected function copyDirectoryFromFixture($directory)
@@ -150,6 +153,13 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
         );
     }
 
+    protected function assertArrayHasKeys(array $keys, array|\ArrayAccess $array): void
+    {
+        foreach ($keys as $key) {
+            $this->assertArrayHasKey($key, $array);
+        }
+    }
+
     private function addGqlMacros()
     {
         TestResponse::macro('assertGqlOk', function () {
@@ -161,6 +171,32 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
                 throw new \PHPUnit\Framework\ExpectationFailedException(
                     'GraphQL response contained errors',
                     new \SebastianBergmann\Comparator\ComparisonFailure('', '', '', json_encode($json, JSON_PRETTY_PRINT))
+                );
+            }
+
+            return $this;
+        });
+    }
+
+    private function addTestResponseMacros()
+    {
+        // Symfony 7.4.0 changed "UTF-8" to "utf-8".
+        // https://github.com/symfony/symfony/pull/60685
+        // While we continue to support lower versions, we'll do a case-insensitive check.
+        // This macro is essentially assertHeader but with case-insensitive value check.
+        TestResponse::macro('assertContentType', function (string $value) {
+            $headerName = 'Content-Type';
+
+            Assert::assertTrue(
+                $this->headers->has($headerName), "Header [{$headerName}] not present on response."
+            );
+
+            $actual = $this->headers->get($headerName);
+
+            if (! is_null($value)) {
+                Assert::assertEquals(
+                    strtolower($value), strtolower($this->headers->get($headerName)),
+                    "Header [{$headerName}] was found, but value [{$actual}] does not match [{$value}]."
                 );
             }
 

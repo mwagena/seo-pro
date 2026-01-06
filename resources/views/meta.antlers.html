@@ -40,12 +40,12 @@
     <meta name="twitter:site" content="{{ twitter_handle | striptags | entities | trim | ensure_left:@ }}" />
 {{ /if }}
 
-{{ if title }}
-    <meta name="twitter:title" content="{{ title | striptags | entities | trim }}" />
+{{ if twitter_title }}
+    <meta name="twitter:title" content="{{ twitter_title | striptags | entities | trim }}" />
 {{ /if }}
 
-{{ if description }}
-    <meta name="twitter:description" content="{{ description | striptags | entities | trim }}" />
+{{ if twitter_description }}
+    <meta name="twitter:description" content="{{ twitter_description | striptags | entities | trim }}" />
 {{ /if }}
 
 {{ if image }}
@@ -76,23 +76,31 @@
     {{ /image }}
 {{ /if }}
 
-<link href="{{ home_url | striptags | entities | trim }}" rel="home" />
-<link href="{{ canonical_url | striptags | entities | trim }}" rel="canonical" />
+{{ unless (robots | raw | contains('noindex')) }}
+    <link href="{{ home_url | striptags | entities | trim }}" rel="home" />
+    <link href="{{ canonical_url | striptags | entities | trim }}" rel="canonical" />
 
-{{ if prev_url }}
-    <link href="{{ prev_url | striptags | entities | trim }}" rel="prev" />
-{{ /if }}
+    {{ if prev_url }}
+        <link href="{{ prev_url | striptags | entities | trim }}" rel="prev" />
+    {{ /if }}
 
-{{ if next_url }}
-    <link href="{{ next_url | striptags | entities | trim }}" rel="next" />
-{{ /if }}
+    {{ if next_url }}
+        <link href="{{ next_url | striptags | entities | trim }}" rel="next" />
+    {{ /if }}
 
-{{ if alternate_locales }}
-    <link rel="alternate" href="{{ canonical_url | striptags | entities | trim }}" hreflang="{{ current_hreflang }}" />
-    {{ alternate_locales }}
-        <link rel="alternate" href="{{ url | striptags | entities | trim }}" hreflang="{{ hreflang }}" />
-    {{ /alternate_locales }}
-{{ /if }}
+    {{ if alternate_locales }}
+        <link rel="alternate" href="{{ canonical_url | striptags | entities | trim }}" hreflang="{{ current_hreflang }}" />
+        {{ if is_default_site }}
+            <link rel="alternate" href="{{ canonical_url | striptags | entities | trim }}" hreflang="x-default" />
+        {{ /if }}
+        {{ alternate_locales }}
+            <link rel="alternate" href="{{ url | striptags | entities | trim }}" hreflang="{{ hreflang }}" />
+            {{ if is_default_site }}
+                <link rel="alternate" href="{{ url | striptags | entities | trim }}" hreflang="x-default" />
+            {{ /if }}
+        {{ /alternate_locales }}
+    {{ /if }}
+{{ /unless }}
 
 {{ if humans_txt }}
     <link type="text/plain" rel="author" href="{{ humans_txt }}" />

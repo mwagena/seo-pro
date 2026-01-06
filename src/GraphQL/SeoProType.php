@@ -4,6 +4,7 @@ namespace Statamic\SeoPro\GraphQL;
 
 use Rebing\GraphQL\Support\Type;
 use Statamic\Facades\GraphQL;
+use Statamic\Fields\Value;
 use Statamic\GraphQL\Fields\DateField;
 use Statamic\GraphQL\Types\SiteType;
 use Statamic\SeoPro\RendersMetaHtml;
@@ -78,13 +79,25 @@ class SeoProType extends Type
             'twitter_card' => [
                 'type' => GraphQL::string(),
             ],
+            'twitter_description' => [
+                'type' => GraphQL::string(),
+            ],
             'twitter_handle' => [
+                'type' => GraphQL::string(),
+            ],
+            'twitter_title' => [
                 'type' => GraphQL::string(),
             ],
             'image' => [
                 'type' => GraphQL::type('AssetInterface'),
                 'resolve' => function ($meta) {
-                    return optional($meta['image'] ?? null)->value();
+                    $image = $meta['image'] ?? null;
+
+                    if ($image instanceof Value) {
+                        $image = $meta['image']->value();
+                    }
+
+                    return $image;
                 },
             ],
             'html' => [

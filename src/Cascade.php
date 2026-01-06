@@ -4,15 +4,19 @@ namespace Statamic\SeoPro;
 
 use Exception;
 use Illuminate\Support\Collection;
+use Statamic\Contracts\Query\Builder;
 use Statamic\Facades\Antlers;
 use Statamic\Facades\Blink;
 use Statamic\Facades\Config;
 use Statamic\Facades\Entry;
+use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Site;
 use Statamic\Facades\URL;
 use Statamic\Fields\Field;
 use Statamic\Fields\Value;
+use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Text;
+use Statamic\Statamic;
 use Statamic\Support\Arr;
 use Statamic\Support\Str;
 use Statamic\View\Cascade as ViewCascade;
@@ -20,6 +24,8 @@ use Statamic\View\Cascade as ViewCascade;
 class Cascade
 {
     protected $data;
+    protected $siteDefaults;
+    protected $sectionDefaults;
     protected $current;
     protected $explicitUrl;
     protected $model;
@@ -42,6 +48,24 @@ class Cascade
     public function with($array)
     {
         $this->data = $this->data->merge($array);
+
+        return $this;
+    }
+
+    public function withSiteDefaults($data)
+    {
+        $this->with($data);
+
+        $this->siteDefaults = $data;
+
+        return $this;
+    }
+
+    public function withSectionDefaults($data)
+    {
+        $this->with($data);
+
+        $this->sectionDefaults = $data;
 
         return $this;
     }
@@ -91,13 +115,16 @@ class Cascade
             'canonical_url' => $this->canonicalUrl(),
             'prev_url' => $this->prevUrl(),
             'next_url' => $this->nextUrl(),
-            'home_url' => Str::removeRight(URL::makeAbsolute('/'), '/'),
+            'home_url' => Str::removeRight(Site::current()?->absoluteUrl() ?? URL::makeAbsolute('/'), '/'),
             'humans_txt' => $this->humans(),
             'site' => $this->site(),
+            'is_default_site' => $this->site()->isDefault(),
             'alternate_locales' => $alternateLocales = $this->alternateLocales(),
             'current_hreflang' => $this->currentHreflang($alternateLocales),
             'last_modified' => $this->lastModified(),
             'twitter_card' => config('statamic.seo-pro.twitter.card'),
+            'twitter_title' => $this->twitterTitle(),
+            'twitter_description' => $this->twitterDescription(),
         ])->all();
     }
 
@@ -129,7 +156,7 @@ class Cascade
     {
         $url = Str::trim($this->explicitUrl ?? $this->data->get('canonical_url'));
 
-        if (! Str::startsWith($url, config('app.url'))) {
+        if (! Str::startsWith($url, Site::current()?->absoluteUrl() ?? config('app.url'))) {
             return $url;
         }
 
@@ -159,7 +186,7 @@ class Cascade
 
         $url = Str::trim($this->data->get('canonical_url'));
 
-        if (! Str::startsWith($url, config('app.url'))) {
+        if (! Str::startsWith($url, Site::current()?->absoluteUrl() ?? config('app.url'))) {
             return $url;
         }
 
@@ -186,7 +213,7 @@ class Cascade
 
         $url = Str::trim($this->data->get('canonical_url'));
 
-        if (! Str::startsWith($url, config('app.url'))) {
+        if (! Str::startsWith($url, Site::current()?->absoluteUrl() ?? config('app.url'))) {
             return $url;
         }
 
@@ -201,8 +228,13 @@ class Cascade
         return URL::makeAbsolute($nextUrl);
     }
 
-    protected function parse($key, $item)
-    {
+    protected function parse(
+        string $key,
+        mixed $item,
+        bool $hasAttemptedToFallbackToSection = false
+    ) {
+        $original = $item;
+
         if (is_array($item)) {
             return array_map(function ($item) use ($key) {
                 return $this->parse($key, $item);
@@ -230,7 +262,26 @@ class Cascade
             $item = Arr::get($this->current, $field);
 
             if ($item instanceof Value) {
-                $item = $item->value();
+                if ($item->fieldtype() instanceof Bard) {
+                    $item = (string) Statamic::modify($item)->bardText();
+                } else {
+                    $item = $item->value();
+                }
+            }
+
+            // When the field is empty, attempt to fall back to the section or site defaults.
+            if (! $item) {
+                if (
+                    ! $hasAttemptedToFallbackToSection
+                    && isset($this->sectionDefaults[$key])
+                    && $this->sectionDefaults[$key] !== $original
+                ) {
+                    return $this->parse($key, $this->sectionDefaults[$key], hasAttemptedToFallbackToSection: true);
+                }
+
+                if (isset($this->siteDefaults[$key]) && $this->siteDefaults[$key] !== $original) {
+                    return $this->parse($key, $this->siteDefaults[$key], $hasAttemptedToFallbackToSection);
+                }
             }
         }
 
@@ -254,6 +305,14 @@ class Cascade
             return $siteName;
         }
 
+        if (config('statamic.seo-pro.pagination') !== false) {
+            if ($paginator = Blink::get('tag-paginator')) {
+                if ($paginator->currentPage() > 1) {
+                    $title = __('seo-pro::meta.pagination_page', ['title' => $title, 'page' => $paginator->currentPage()]);
+                }
+            }
+        }
+
         if (! $siteName || $siteNamePosition === 'none') {
             return $title;
         }
@@ -269,11 +328,33 @@ class Cascade
 
     protected function ogTitle()
     {
+        if ($title = $this->data->get('og_title')) {
+            return $title;
+        }
+
         if ($title = $this->data->get('title')) {
             return $title;
         }
 
         return $this->compiledTitle();
+    }
+
+    protected function twitterTitle()
+    {
+        if ($title = $this->data->get('twitter_title')) {
+            return $title;
+        }
+
+        return $this->data->get('title');
+    }
+
+    protected function twitterDescription()
+    {
+        if ($description = $this->data->get('twitter_description')) {
+            return $description;
+        }
+
+        return $this->data->get('description');
     }
 
     protected function lastModified()
@@ -306,7 +387,8 @@ class Cascade
             ->reject(fn ($locale) => collect(config('statamic.seo-pro.alternate_locales.excluded_sites'))->contains($locale))
             ->map(function ($locale) {
                 return [
-                    'site' => Config::getSite($locale),
+                    'site' => $site = Site::get($locale),
+                    'is_default_site' => $site->isDefault(),
                     'url' => $this->model->in($locale)->absoluteUrl(),
                 ];
             });
@@ -377,7 +459,7 @@ class Cascade
 
     protected function parseImageField($value)
     {
-        return $value instanceof Collection
+        return $value instanceof Collection || $value instanceof Builder
             ? $value->first()
             : $value;
     }
@@ -400,13 +482,33 @@ class Cascade
             $viewCascade = array_merge(
                 app(ViewCascade::class)->toArray(),
                 $this->current ?? [],
-                ['___tmpValue' => $value],
+                ['___tmpValue' => $value, 'config' => config()->all()],
+                $this->hydrateGlobals()
             );
 
             return (string) Antlers::parse('{{ ___tmpValue }}', $viewCascade);
         } catch (Exception $exception) {
             return $item;
         }
+    }
+
+    private function hydrateGlobals()
+    {
+        $data = [];
+
+        foreach ($globals = GlobalSet::all() as $global) {
+            if ($global = $global->in($this->site()->handle())) {
+                $data[$global->handle()] = $global;
+            }
+        }
+
+        if ($mainGlobal = $globals->get('global')) {
+            foreach ($mainGlobal->toDeferredAugmentedArray() as $key => $value) {
+                $data[$key] = $value;
+            }
+        }
+
+        return $data;
     }
 
     protected function humans()

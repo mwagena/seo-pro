@@ -2,6 +2,7 @@
 
 namespace Statamic\SeoPro\Tags;
 
+use Statamic\Facades\Image;
 use Statamic\SeoPro\Cascade;
 use Statamic\SeoPro\GetsSectionDefaults;
 use Statamic\SeoPro\RendersMetaHtml;
@@ -39,8 +40,8 @@ class SeoProTags extends Tags
         $current = optional($this->context->get('seo'))->augmentable();
 
         $metaData = (new Cascade)
-            ->with(SiteDefaults::load()->augmented())
-            ->with($this->getAugmentedSectionDefaults($current))
+            ->withSiteDefaults(SiteDefaults::load()->augmented())
+            ->withSectionDefaults($this->getAugmentedSectionDefaults($current))
             ->with($this->context->value('seo'))
             ->with($current ? [] : $this->context->except('template_content'))
             ->withCurrent($current)
@@ -70,8 +71,6 @@ class SeoProTags extends Tags
      */
     protected function isGlidePresetEnabled($preset)
     {
-        $server = app(\League\Glide\Server::class);
-
-        return collect($server->getPresets())->has($preset);
+        return array_key_exists($preset, Image::customManipulationPresets());
     }
 }

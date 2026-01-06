@@ -244,6 +244,10 @@ class Report implements Arrayable, Jsonable
         foreach ($results as $class => $result) {
             $class = "Statamic\\SeoPro\\Reporting\\Rules\\$class";
 
+            if (! class_exists($class)) {
+                continue;
+            }
+
             $rule = (new $class)->setReport($this);
 
             $rule->load($result);
@@ -347,6 +351,11 @@ class Report implements Arrayable, Jsonable
     public static function latest()
     {
         return static::all()->first();
+    }
+
+    public static function latestGenerated()
+    {
+        return static::all()->filter(fn ($report) => $report->isGenerated())->first();
     }
 
     public static function find($id)
@@ -456,7 +465,7 @@ class Report implements Arrayable, Jsonable
     public function defaults()
     {
         return collect((new Cascade)
-            ->with(SiteDefaults::load()->all())
+            ->withSiteDefaults(SiteDefaults::load()->all())
             ->get());
     }
 
@@ -518,7 +527,7 @@ class Report implements Arrayable, Jsonable
     protected function allContent()
     {
         $content = collect()
-            ->merge(Entry::all())
+            ->merge(Entry::all()->whereNull('redirect'))
             ->merge(Term::all())
             ->keyBy
             ->id();

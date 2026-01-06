@@ -216,17 +216,36 @@ class SiteDefaults extends Collection
                                 'type' => 'select',
                                 'multiple' => true,
                                 'options' => [
+                                    'follow',
+                                    'index',
+                                    'noarchive',
+                                    'noimageindex',
                                     'noindex',
                                     'nofollow',
+                                    'nosnippet',
                                 ],
                                 'localizable' => true,
                             ],
                         ],
                     ],
                 ],
-                'image' => [
-                    'display' => __('seo-pro::messages.image'),
+                'opengraph' => [
+                    'display' => __('seo-pro::messages.opengraph'),
                     'fields' => [
+                        [
+                            'handle' => 'og_title',
+                            'field' => [
+                                'display' => __('seo-pro::fieldsets/defaults.og_title'),
+                                'instructions' => __('seo-pro::fieldsets/defaults.og_title_instruct'),
+                                'type' => 'seo_pro_source',
+                                'inherit' => false,
+                                'localizable' => true,
+                                'field' => [
+                                    'type' => 'text',
+                                ],
+                                'default' => '@seo:title',
+                            ],
+                        ],
                         [
                             'handle' => 'image_section',
                             'field' => [
@@ -271,6 +290,34 @@ class SiteDefaults extends Collection
                                 'instructions' => __('seo-pro::fieldsets/defaults.twitter_handle_instruct'),
                                 'type' => 'text',
                                 'localizable' => true,
+                            ],
+                        ],
+                        [
+                            'handle' => 'twitter_title',
+                            'field' => [
+                                'display' => __('seo-pro::fieldsets/defaults.twitter_title'),
+                                'instructions' => __('seo-pro::fieldsets/defaults.twitter_title_instruct'),
+                                'type' => 'seo_pro_source',
+                                'inherit' => false,
+                                'localizable' => true,
+                                'field' => [
+                                    'type' => 'text',
+                                ],
+                                'default' => '@seo:title',
+                            ],
+                        ],
+                        [
+                            'handle' => 'twitter_description',
+                            'field' => [
+                                'display' => __('seo-pro::fieldsets/defaults.twitter_description'),
+                                'instructions' => __('seo-pro::fieldsets/defaults.twitter_description_instruct'),
+                                'type' => 'seo_pro_source',
+                                'inherit' => false,
+                                'localizable' => true,
+                                'field' => [
+                                    'type' => 'textarea',
+                                ],
+                                'default' => '@seo:description',
                             ],
                         ],
                     ],

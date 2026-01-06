@@ -8,11 +8,17 @@ use Statamic\Facades\Blueprint;
 use Statamic\Facades\GraphQL;
 use Statamic\Fields\Fields as BlueprintFields;
 use Statamic\Fields\Fieldtype;
+use Statamic\SeoPro\Cascade;
 use Statamic\SeoPro\Fields as SeoProFields;
+use Statamic\SeoPro\GetsSectionDefaults;
+use Statamic\SeoPro\SiteDefaults;
+use Statamic\Statamic;
 use Statamic\Support\Arr;
 
 class SeoProFieldtype extends Fieldtype
 {
+    use GetsSectionDefaults;
+
     protected $selectable = true;
     protected $icon = 'seo-search-graph';
 
@@ -81,7 +87,7 @@ class SeoProFieldtype extends Fieldtype
             return $data;
         }
 
-        return Blueprint::make()
+        $augmented = Blueprint::make()
             ->setContents(['fields' => $this->fieldConfig()])
             ->fields()
             ->addValues($data)
@@ -89,6 +95,19 @@ class SeoProFieldtype extends Fieldtype
             ->values()
             ->only(array_keys($data))
             ->all();
+
+        if (Statamic::isApiRoute()) {
+            $content = $this->field()->parent();
+
+            return (new Cascade)
+                ->withSiteDefaults(SiteDefaults::load()->augmented())
+                ->withSectionDefaults($this->getAugmentedSectionDefaults($content))
+                ->with($augmented)
+                ->withCurrent($content)
+                ->get();
+        }
+
+        return $augmented;
     }
 
     public function toGqlType()

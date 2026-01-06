@@ -4,17 +4,24 @@ namespace Statamic\SeoPro\Sitemap;
 
 use Illuminate\Support\Collection as IlluminateCollection;
 use Illuminate\Support\LazyCollection;
+use Illuminate\Support\Str;
+use Statamic\Contracts\Entries\Entry;
+use Statamic\Contracts\Query\Builder;
+use Statamic\Contracts\Taxonomies\Term;
 use Statamic\Facades\Blink;
 use Statamic\Facades\Collection;
-use Statamic\Facades\Entry;
+use Statamic\Facades\Entry as EntryFacade;
+use Statamic\Facades\Site as SiteFacade;
 use Statamic\Facades\Taxonomy;
 use Statamic\SeoPro\Cascade;
 use Statamic\SeoPro\GetsSectionDefaults;
 use Statamic\SeoPro\SiteDefaults;
+use Statamic\Sites\Site;
+use Statamic\Support\Traits\Hookable;
 
 class Sitemap
 {
-    use GetsSectionDefaults;
+    use GetsSectionDefaults, Hookable;
 
     const CACHE_KEY = 'seo-pro.sitemap';
 
@@ -24,6 +31,7 @@ class Sitemap
             ->merge($this->publishedEntries())
             ->merge($this->publishedTerms())
             ->merge($this->publishedCollectionTerms())
+            ->merge($this->additionalItems())
             ->pipe(fn ($pages) => $this->getPages($pages))
             ->sortBy(fn ($page) => substr_count(rtrim($page->path(), '/'), '/'))
             ->values()
@@ -59,6 +67,7 @@ class Sitemap
                 collect()
                     ->merge($this->publishedTerms())
                     ->merge($this->publishedCollectionTerms())
+                    ->merge($this->additionalItems())
                     ->skip($offset)
                     ->take($remaining)
             );
@@ -88,10 +97,21 @@ class Sitemap
             ->all();
     }
 
+    public function sites(): IlluminateCollection
+    {
+        $sites = SiteFacade::all()->filter(fn ($site) => Str::of($site->absoluteUrl())->startsWith(request()->schemeAndHttpHost()));
+
+        return $this->runHooks('sites', $sites);
+    }
+
     protected function getPages($items)
     {
         return $items
             ->map(function ($content) {
+                if ($content instanceof Page) {
+                    return $content;
+                }
+
                 $cascade = $content->value('seo');
 
                 if ($cascade === false || collect($cascade)->get('sitemap') === false) {
@@ -100,11 +120,13 @@ class Sitemap
 
                 $data = (new Cascade)
                     ->forSitemap()
-                    ->with($this->getSiteDefaults())
-                    ->with($this->getSectionDefaults($content))
+                    ->withSiteDefaults($this->getSiteDefaults())
+                    ->withSectionDefaults($this->getSectionDefaults($content))
                     ->with($cascade ?: [])
                     ->withCurrent($content)
                     ->get();
+
+                $data['hreflangs'] = $this->hrefLangs($content);
 
                 return (new Page)->with($data);
             })
@@ -123,7 +145,11 @@ class Sitemap
             ->values()
             ->all();
 
-        return Entry::query()
+        return EntryFacade::query()
+            ->when(
+                $this->sites()->isNotEmpty(),
+                fn (Builder $query) => $query->whereIn('site', $this->sites()->map->handle()->all())
+            )
             ->whereIn('collection', $collections)
             ->whereNotNull('uri')
             ->whereStatus('published')
@@ -156,7 +182,10 @@ class Sitemap
         return Taxonomy::all()
             ->flatMap(function ($taxonomy) {
                 return $taxonomy->cascade('seo') !== false
-                    ? $taxonomy->queryTerms()->get()
+                    ? $taxonomy
+                        ->queryTerms()
+                        ->when($this->sites()->isNotEmpty(), fn (Builder $query) => $query->whereIn('site', $this->sites()->map->handle()->all()))
+                        ->get()
                     : collect();
             })
             ->filter
@@ -176,7 +205,10 @@ class Sitemap
             })
             ->flatMap(function ($taxonomy) {
                 return $taxonomy->cascade('seo') !== false
-                    ? $taxonomy->queryTerms()->get()->map->collection($taxonomy->collection())
+                    ? $taxonomy
+                        ->queryTerms()
+                        ->when($this->sites()->isNotEmpty(), fn (Builder $query) => $query->whereIn('site', $this->sites()->map->handle()->all()))
+                        ->get()->map->collection($taxonomy->collection())
                     : collect();
             })
             ->filter
@@ -186,10 +218,74 @@ class Sitemap
             });
     }
 
+    protected function additionalItems(): IlluminateCollection
+    {
+        $response = $this->runHooksWith('additional', ['items' => collect()]);
+
+        $items = $response->items ?? [];
+
+        return $items instanceof IlluminateCollection ? $items : collect();
+    }
+
     protected function getSiteDefaults()
     {
         return Blink::once('seo-pro.site-defaults', function () {
             return SiteDefaults::load()->all();
         });
+    }
+
+    protected function hrefLangs($content): array
+    {
+        if (
+            config('statamic.seo-pro.alternate_locales') === false
+            || config('statamic.seo-pro.alternate_locales.enabled') === false
+        ) {
+            return [];
+        }
+
+        return match (true) {
+            $content instanceof Entry => $this->hrefLangsForEntry($content),
+            $content instanceof Term => $this->hrefLangsForTerm($content),
+            default => [],
+        };
+    }
+
+    private function hrefLangsForEntry(Entry $entry): array
+    {
+        return SiteFacade::all()
+            ->values()
+            ->filter(fn (Site $site) => $entry->in($site->handle()))
+            ->filter(fn (Site $site) => $entry->in($site->handle())->published())
+            ->reject(fn (Site $site) => collect(config('statamic.seo-pro.alternate_locales.excluded_sites'))->contains($site->handle()))
+            ->map(fn (Site $site) => [
+                'href' => $this->sanitizeUrl($entry->in($site->handle())->absoluteUrl()),
+                'hreflang' => strtolower(str_replace('_', '-', $site->locale())),
+            ])
+            ->push([
+                'href' => $this->sanitizeUrl($entry->root()->absoluteUrl()),
+                'hreflang' => 'x-default',
+            ])
+            ->all();
+    }
+
+    private function hrefLangsForTerm(Term $term): array
+    {
+        return SiteFacade::all()
+            ->values()
+            ->reject(fn (Site $site) => collect(config('statamic.seo-pro.alternate_locales.excluded_sites'))->contains($site->handle()))
+            ->map(fn (Site $site) => [
+                'href' => $this->sanitizeUrl($term->in($site->handle())->absoluteUrl()),
+                'hreflang' => strtolower(str_replace('_', '-', $site->locale())),
+            ])
+            ->push([
+                'href' => $this->sanitizeUrl($term->inDefaultLocale()->absoluteUrl()),
+                'hreflang' => 'x-default',
+            ])
+            ->all();
+    }
+
+    private function sanitizeUrl(string $url): string
+    {
+        return htmlspecialchars($url, ENT_QUOTES | ENT_XML1, 'UTF-8');
     }
 }

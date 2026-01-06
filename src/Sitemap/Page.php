@@ -20,7 +20,7 @@ class Page
 
     public function loc()
     {
-        return $this->data->get('canonical_url');
+        return htmlspecialchars($this->data->get('canonical_url'), ENT_QUOTES | ENT_XML1, 'UTF-8');
     }
 
     public function lastmod()
@@ -31,6 +31,11 @@ class Page
     public function changefreq()
     {
         return $this->data->get('change_frequency');
+    }
+
+    public function hrefLangs(): array
+    {
+        return $this->data->get('hreflangs', []);
     }
 
     public function priority()
@@ -46,6 +51,7 @@ class Page
             'lastmod' => $this->lastmod(),
             'changefreq' => $this->changefreq(),
             'priority' => $this->priority(),
+            'hreflangs' => $this->hrefLangs(),
         ];
     }
 }

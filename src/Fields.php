@@ -55,6 +55,14 @@ class Fields
                 ],
             ],
             [
+                'handle' => 'meta_section',
+                'field' => [
+                    'display' => __('seo-pro::fieldsets/defaults.meta_section'),
+                    'instructions' => __('seo-pro::fieldsets/defaults.meta_section_instruct'),
+                    'type' => 'section',
+                ],
+            ],
+            [
                 'handle' => 'title',
                 'field' => [
                     'display' => __("seo-pro::fieldsets/{$langFile}.title"),
@@ -65,6 +73,7 @@ class Fields
                     'localizable' => true,
                     'field' => [
                         'type' => 'text',
+                        'character_limit' => 60,
                     ],
                 ],
             ],
@@ -78,6 +87,7 @@ class Fields
                     'localizable' => true,
                     'field' => [
                         'type' => 'textarea',
+                        'character_limit' => 160,
                     ],
                 ],
             ],
@@ -153,9 +163,35 @@ class Fields
                         'create' => true,
                         'multiple' => true,
                         'options' => [
+                            'follow',
+                            'index',
+                            'noarchive',
+                            'noimageindex',
                             'noindex',
                             'nofollow',
+                            'nosnippet',
                         ],
+                    ],
+                ],
+            ],
+            [
+                'handle' => 'image_section',
+                'field' => [
+                    'display' => __('seo-pro::fieldsets/defaults.image_section'),
+                    'instructions' => __('seo-pro::fieldsets/defaults.image_section_instruct'),
+                    'type' => 'section',
+                ],
+            ],
+            [
+                'handle' => 'og_title',
+                'field' => [
+                    'display' => __("seo-pro::fieldsets/{$langFile}.og_title"),
+                    'instructions' => __("seo-pro::fieldsets/{$langFile}.og_title_instruct"),
+                    'type' => 'seo_pro_source',
+                    'inherit' => true,
+                    'localizable' => true,
+                    'field' => [
+                        'type' => 'text',
                     ],
                 ],
             ],
@@ -174,6 +210,14 @@ class Fields
                 ],
             ],
             [
+                'handle' => 'social_section',
+                'field' => [
+                    'display' => __('seo-pro::fieldsets/defaults.social_section'),
+                    'instructions' => __('seo-pro::fieldsets/defaults.social_section_instruct'),
+                    'type' => 'section',
+                ],
+            ],
+            [
                 'handle' => 'twitter_handle',
                 'field' => [
                     'display' => __("seo-pro::fieldsets/{$langFile}.twitter_handle"),
@@ -183,6 +227,40 @@ class Fields
                     'field' => [
                         'type' => 'text',
                     ],
+                ],
+            ],
+            [
+                'handle' => 'twitter_title',
+                'field' => [
+                    'display' => __("seo-pro::fieldsets/{$langFile}.twitter_title"),
+                    'instructions' => __("seo-pro::fieldsets/{$langFile}.twitter_title_instruct"),
+                    'type' => 'seo_pro_source',
+                    'inherit' => true,
+                    'localizable' => true,
+                    'field' => [
+                        'type' => 'text',
+                    ],
+                ],
+            ],
+            [
+                'handle' => 'twitter_description',
+                'field' => [
+                    'display' => __("seo-pro::fieldsets/{$langFile}.twitter_description"),
+                    'instructions' => __("seo-pro::fieldsets/{$langFile}.twitter_description_instruct"),
+                    'type' => 'seo_pro_source',
+                    'inherit' => true,
+                    'localizable' => true,
+                    'field' => [
+                        'type' => 'textarea',
+                    ],
+                ],
+            ],
+            [
+                'handle' => 'sitemap_section',
+                'field' => [
+                    'display' => __('seo-pro::fieldsets/defaults.sitemap_section'),
+                    'instructions' => __('seo-pro::fieldsets/defaults.sitemap_section_instruct'),
+                    'type' => 'section',
                 ],
             ],
             [
@@ -248,11 +326,11 @@ class Fields
         }
 
         $cascade = Blink::once('seo-pro::placeholder.cascade', function () {
-            $cascade = (new Cascade)->with(SiteDefaults::load()->all());
+            $cascade = (new Cascade)->withSiteDefaults(SiteDefaults::load()->all());
 
             if ($this->data) {
                 $cascade = $cascade
-                    ->with($this->getSectionDefaults($this->data))
+                    ->withSectionDefaults($this->getSectionDefaults($this->data))
                     ->with($this->data->value('seo', []))
                     ->withCurrent($this->data);
             }
